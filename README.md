@@ -28,7 +28,7 @@
 
 **Step 1: Launch EC2 (Ubuntu 22.04):**
 
-- Provision an EC2 instance on AWS with Ubuntu 22.04.
+- Provision an EC2 instance on AWS with Ubuntu 24.04.
 - Connect to the instance using SSH.
 
 **Step 2: Clone the Code:**
@@ -89,7 +89,7 @@ docker build --build-arg TMDB_V3_API_KEY=<your-api-key> -t netflix .
         
         sonarqube
         ```
-        docker run -d --name sonar -p 9000:9000 sonarqube:lts-community
+        docker run -d --name sonar -p 9000:9000 sonarqube:community
         ```
         
         
@@ -124,20 +124,14 @@ docker build --build-arg TMDB_V3_API_KEY=<your-api-key> -t netflix .
     
     ```bash
     sudo apt update
-    sudo apt install fontconfig openjdk-17-jre
-    java -version
-    openjdk version "17.0.8" 2023-07-18
-    OpenJDK Runtime Environment (build 17.0.8+7-Debian-1deb12u1)
-    OpenJDK 64-Bit Server VM (build 17.0.8+7-Debian-1deb12u1, mixed mode, sharing)
-    
-    #jenkins
-    sudo wget -O /usr/share/keyrings/jenkins-keyring.asc \
-    https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-    echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
-    https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
-    /etc/apt/sources.list.d/jenkins.list > /dev/null
-    sudo apt-get update
-    sudo apt-get install jenkins
+    sudo apt install openjdk-21-jre-headless -y
+    sudo wget -O /etc/apt/keyrings/jenkins-keyring.asc \
+      https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+    echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc]" \
+      https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
+      /etc/apt/sources.list.d/jenkins.list > /dev/null
+    sudo apt update
+    sudo apt install jenkins -y
     sudo systemctl start jenkins
     sudo systemctl enable jenkins
     ```
@@ -162,7 +156,7 @@ Install below plugins
 
 ### **Configure Java and Nodejs in Global Tool Configuration**
 
-Goto Manage Jenkins → Tools → Install JDK(17) and NodeJs(16)→ Click on Apply and Save
+Goto Manage Jenkins → Tools → Install JDK(21) and NodeJs(16)→ Click on Apply and Save
 
 
 ### SonarQube
@@ -183,55 +177,6 @@ We will install a sonar scanner in the tools.
 
 Create a Jenkins webhook
 
-1. **Configure CI/CD Pipeline in Jenkins:**
-- Create a CI/CD pipeline in Jenkins to automate your application deployment.
-
-```groovy
-pipeline {
-    agent any
-    tools {
-        jdk 'jdk17'
-        nodejs 'node16'
-    }
-    environment {
-        SCANNER_HOME = tool 'sonar-scanner'
-    }
-    stages {
-        stage('clean workspace') {
-            steps {
-                cleanWs()
-            }
-        }
-        stage('Checkout from Git') {
-            steps {
-                git branch: 'main', url: 'https://github.com/N4si/DevSecOps-Project.git'
-            }
-        }
-        stage("Sonarqube Analysis") {
-            steps {
-                withSonarQubeEnv('sonar-server') {
-                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Netflix \
-                    -Dsonar.projectKey=Netflix'''
-                }
-            }
-        }
-        stage("quality gate") {
-            steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
-                }
-            }
-        }
-        stage('Install Dependencies') {
-            steps {
-                sh "npm install"
-            }
-        }
-    }
-}
-```
-
-Certainly, here are the instructions without step numbers:
 
 **Install Dependency-Check and Docker Tools in Jenkins**
 
@@ -280,7 +225,7 @@ Now, you have installed the Dependency-Check plugin, configured the tool, and ad
 pipeline{
     agent any
     tools{
-        jdk 'jdk17'
+        jdk 'jdk21'
         nodejs 'node16'
     }
     environment {
@@ -294,7 +239,7 @@ pipeline{
         }
         stage('Checkout from Git'){
             steps{
-                git branch: 'main', url: 'https://github.com/N4si/DevSecOps-Project.git'
+                git branch: 'main', url: 'https://github.com/danh1508bku/DevSecOps-Project.git'
             }
         }
         stage("Sonarqube Analysis "){
@@ -308,7 +253,7 @@ pipeline{
         stage("quality gate"){
            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token' 
                 }
             } 
         }
@@ -319,7 +264,11 @@ pipeline{
         }
         stage('OWASP FS SCAN') {
             steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+                dependencyCheck(
+                    odcInstallation: 'DP-Check',
+                    nvdCredentialsId: 'nvd-api-key',
+                    additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit'
+                )
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
@@ -332,25 +281,37 @@ pipeline{
             steps{
                 script{
                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
-                       sh "docker build --build-arg TMDB_V3_API_KEY=<yourapikey> -t netflix ."
-                       sh "docker tag netflix nasi101/netflix:latest "
-                       sh "docker push nasi101/netflix:latest "
+                       sh "docker build --build-arg TMDB_V3_API_KEY=a50f385c15b408c3b3d56e3eac3bec4b -t netflix ."
+                       sh "docker tag netflix danh1508bku/netflix:latest "
+                       sh "docker push danh1508bku/netflix:latest "
                     }
                 }
             }
         }
         stage("TRIVY"){
             steps{
-                sh "trivy image nasi101/netflix:latest > trivyimage.txt" 
+                sh "trivy image danh1508bku/netflix:latest > trivyimage.txt" 
             }
         }
         stage('Deploy to container'){
             steps{
-                sh 'docker run -d --name netflix -p 8081:80 nasi101/netflix:latest'
+                sh 'docker run -d --name netflix -p 8081:80 danh1508bku/netflix:latest'
             }
         }
     }
+    post {
+    always {
+        emailext attachLog: true,
+            subject: "${currentBuild.result}",
+            body: """Project: ${env.JOB_NAME}<br/>
+                     Build Number: ${env.BUILD_NUMBER}<br/>
+                     URL: ${env.BUILD_URL}<br/>""",
+            to: 'danhdongdu2k5@gmail.com',
+            attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
+      }
+  }
 }
+
 
 
 If you get docker login failed errorr
@@ -374,17 +335,16 @@ sudo systemctl restart jenkins
 
    ```bash
    sudo useradd --system --no-create-home --shell /bin/false prometheus
-   wget https://github.com/prometheus/prometheus/releases/download/v2.47.1/prometheus-2.47.1.linux-amd64.tar.gz
+   wget https://github.com/prometheus/prometheus/releases/download/v3.10.0/prometheus-3.10.0.linux-amd64.tar.gz
    ```
 
    Extract Prometheus files, move them, and create directories:
 
    ```bash
-   tar -xvf prometheus-2.47.1.linux-amd64.tar.gz
-   cd prometheus-2.47.1.linux-amd64/
+   tar -xvf prometheus-3.10.0.linux-amd64.tar.gz
+   cd prometheus-3.10.0.linux-amd64/
    sudo mkdir -p /data /etc/prometheus
    sudo mv prometheus promtool /usr/local/bin/
-   sudo mv consoles/ console_libraries/ /etc/prometheus/
    sudo mv prometheus.yml /etc/prometheus/prometheus.yml
    ```
 
@@ -397,7 +357,7 @@ sudo systemctl restart jenkins
    Create a systemd unit configuration file for Prometheus:
 
    ```bash
-   sudo nano /etc/systemd/system/prometheus.service
+   sudo vi /etc/systemd/system/prometheus.service
    ```
 
    Add the following content to the `prometheus.service` file:
@@ -420,8 +380,6 @@ sudo systemctl restart jenkins
    ExecStart=/usr/local/bin/prometheus \
      --config.file=/etc/prometheus/prometheus.yml \
      --storage.tsdb.path=/data \
-     --web.console.templates=/etc/prometheus/consoles \
-     --web.console.libraries=/etc/prometheus/console_libraries \
      --web.listen-address=0.0.0.0:9090 \
      --web.enable-lifecycle
 
@@ -462,21 +420,21 @@ sudo systemctl restart jenkins
 
    ```bash
    sudo useradd --system --no-create-home --shell /bin/false node_exporter
-   wget https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz
+   wget https://github.com/prometheus/node_exporter/releases/download/v1.10.2/node_exporter-1.10.2.linux-amd64.tar.gz
    ```
 
    Extract Node Exporter files, move the binary, and clean up:
 
    ```bash
-   tar -xvf node_exporter-1.6.1.linux-amd64.tar.gz
-   sudo mv node_exporter-1.6.1.linux-amd64/node_exporter /usr/local/bin/
+   tar -xvf node_exporter-1.10.2.linux-amd64.tar.gz
+   sudo mv node_exporter-1.10.2.linux-amd64/node_exporter /usr/local/bin/
    rm -rf node_exporter*
    ```
 
    Create a systemd unit configuration file for Node Exporter:
 
    ```bash
-   sudo nano /etc/systemd/system/node_exporter.service
+   sudo vi /etc/systemd/system/node_exporter.service
    ```
 
    Add the following content to the `node_exporter.service` file:
@@ -563,7 +521,7 @@ sudo systemctl restart jenkins
 
 ####Grafana
 
-**Install Grafana on Ubuntu 22.04 and Set it up to Work with Prometheus**
+**Install Grafana on Ubuntu 24.04 and Set it up to Work with Prometheus**
 
 **Step 1: Install Dependencies:**
 
