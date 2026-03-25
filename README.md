@@ -141,3 +141,16 @@ The application runs on an AWS EKS cluster managed through ArgoCD, enabling GitO
 
 **Prometheus scrape path for Jenkins** — The Jenkins Prometheus plugin exposes metrics at `/prometheus`, not the standard `/metrics` path. Missing this causes silent scrape failures that are hard to diagnose because Prometheus doesn't error loudly — it simply marks the target as unreachable with no further detail.
 
+## 🚧 Limitations & Future Improvements
+
+**Infrastructure as Code (Terraform)**
+All AWS infrastructure (EC2, EKS cluster, node groups, security groups) was provisioned manually via the console. This means the environment cannot be reliably reproduced and there is no version history for infrastructure changes. The natural next step is to define the full stack in Terraform, store state in S3 with DynamoDB locking, and provision everything from a single `terraform apply`.
+
+**Secret Management**
+Sensitive values (TMDB API key, DockerHub credentials) are stored in the Jenkins Credential Store, which is better than hardcoding but still ties secrets to the CI server. A more robust approach would be to use AWS Secrets Manager or HashiCorp Vault, with the pipeline fetching secrets at runtime rather than storing them in Jenkins at all. This also makes secret rotation possible without touching the Jenkinsfile.
+
+**Multi-environment pipeline (dev / staging / prod)**
+The current pipeline deploys directly to a single cluster with no environment separation. A production pattern would have the pipeline promote a tested image through environments sequentially, with ArgoCD managing a separate Application resource per environment pointing to environment-specific value overrides.
+
+**Pipeline runs on Jenkins master**
+Build steps execute directly on the Jenkins controller node rather than on ephemeral agents. This is a resource contention and security concern in production — a long-running or malicious build job could affect the controller itself. The fix is to configure a Jenkins agent (via Docker or Kubernetes plugin) so each build runs in an isolated container that is discarded after the job completes.
